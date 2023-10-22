@@ -1,0 +1,219 @@
+package server
+
+import (
+	"context"
+	"database/sql"
+	"encoding/base32"
+	"errors"
+	"fmt"
+	"net/http"
+	"os"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/gorilla/securecookie"
+	"github.com/jk1117/go-base/internal/controller"
+	"github.com/jk1117/go-base/internal/database"
+	"github.com/labstack/echo/v4"
+	"github.com/redis/go-redis/v9"
+	"github.com/sqlc-dev/pqtype"
+)
+
+type SessionStore struct {
+	q       *database.Queries
+	rdb     *redis.Client
+	encoder *securecookie.SecureCookie
+}
+type Session struct {
+	SessionID string `json:"session_id" redis:"session_id"`
+	UserID    string `json:"user_id" redis:"user_id"`
+	IpAddr    string `json:"ip_addr" redis:"ip_addr"`
+	UserAgent string `json:"user_agent,omitempty" redis:"user_agent"`
+	ExpiredAt int64  `json:"expired_at" redis:"expired_at"`
+}
+
+const SESSIONCOOKIE = "X-APP-SID"
+const SESSION_DURATION = 4 * time.Hour
+const TIMEOUT = 2 * time.Second
+
+var base32RawStdEncoding = base32.StdEncoding.WithPadding(base32.NoPadding)
+
+func NewSessionStore(q *database.Queries, rdb *redis.Client) *SessionStore {
+	var COOKIE_HASHKEY string = os.Getenv("COOKIE_HASHKEY")
+	var COOKIE_BLOCKKEY string = os.Getenv("COOKIE_BLOCKKEY")
+
+	return &SessionStore{
+		q:       q,
+		rdb:     rdb,
+		encoder: securecookie.New([]byte(COOKIE_HASHKEY), []byte(COOKIE_BLOCKKEY)),
+	}
+}
+
+func (store *SessionStore) Get(c echo.Context) (*Session, error) {
+	sessionCookie, err := c.Cookie(SESSIONCOOKIE)
+	if err != nil {
+		return nil, err
+	}
+	var sessionId string
+	err = store.encoder.Decode(SESSIONCOOKIE, sessionCookie.Value, &sessionId)
+	if err != nil {
+		return nil, err
+	}
+
+	redisKey := "session:" + sessionId
+	res := store.rdb.HGetAll(c.Request().Context(), redisKey)
+	if err := res.Err(); err != nil {
+		return nil, err
+	}
+	if len(res.Val()) > 0 {
+		var session Session
+		err = res.Scan(&session)
+		if err != nil {
+			return nil, err
+		}
+
+		err = session.validate(c)
+		if err != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), TIMEOUT)
+			defer cancel()
+			store.rdb.Del(ctx, redisKey)
+			return nil, err
+		}
+		return &session, nil
+	}
+
+	// Search for database if not found in redis
+	loginSession, err := store.q.GetSessionBySessionId(c.Request().Context(), sessionId)
+	if err != nil {
+		return nil, err
+	}
+	session := parseDbSession(&loginSession)
+	err = session.validate(c)
+	if err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), TIMEOUT)
+		defer cancel()
+		store.q.DeleteSessionBySessionId(ctx, sessionId)
+		return nil, err
+	}
+	return store.Cache(c.Request().Context(), session)
+}
+
+func (store *SessionStore) NewSession(c echo.Context, userId uuid.UUID) (*Session, error) {
+	sid := base32RawStdEncoding.EncodeToString(securecookie.GenerateRandomKey(32))
+	userAgent := sql.NullString{}
+	if c.Request().UserAgent() != "" {
+		userAgent.String = c.Request().UserAgent()
+		userAgent.Valid = true
+	}
+	ipAddr := pqtype.Inet{}
+	ipAddr.Scan(c.RealIP())
+	loginSession, err := store.q.CreateLoginSession(c.Request().Context(), database.CreateLoginSessionParams{
+		SessionID: sid,
+		UserID:    userId,
+		LastLogin: time.Now(),
+		UserAgent: userAgent,
+		ExpiredAt: time.Now().Add(SESSION_DURATION),
+		IpAddr:    ipAddr,
+	})
+	if err != nil {
+		return nil, errors.New(fmt.Sprintf("Error Creating Session, error: %v", err))
+	}
+
+	session := parseDbSession(&loginSession)
+	return store.Cache(c.Request().Context(), session)
+}
+
+func (store *SessionStore) Cache(c context.Context, session *Session) (*Session, error) {
+	err := store.rdb.HSet(c, "session:"+session.SessionID, session).Err()
+	if err != nil {
+		return nil, errors.New(fmt.Sprintf("Error Creating Session, error: %v", err))
+	}
+	return session, nil
+}
+
+func (store *SessionStore) SetSessionCookie(c echo.Context, session *Session) error {
+	if session == nil {
+		return errors.New("Session not provided.")
+	}
+	encoded, err := store.encoder.Encode(SESSIONCOOKIE, session.SessionID)
+	if err != nil {
+		return err
+	}
+	expiredAt := time.Unix(session.ExpiredAt, 0)
+	cookie := &http.Cookie{
+		Name:     SESSIONCOOKIE,
+		Value:    encoded,
+		Domain:   os.Getenv("DOMAIN"),
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(time.Now().Sub(expiredAt).Abs().Seconds()),
+	}
+	c.SetCookie(cookie)
+	return nil
+}
+
+func (store *SessionStore) SessionAuth(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		session, err := store.Get(c)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusUnauthorized, errors.New("Session expired, try login again."))
+		}
+
+		userId, err := uuid.Parse(session.UserID)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusUnauthorized, errors.New("Session expired, try login again."))
+		}
+		account, err := store.q.GetActiveAccountById(c.Request().Context(), userId)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusUnauthorized, errors.New("Session expired, try login again."))
+		}
+		roles, err := store.q.GetUserRoleByUser(c.Request().Context(), userId)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusUnauthorized, errors.New("Session expired, try login again."))
+		}
+		var userRoles []controller.ROLE
+		for _, r := range roles {
+			userRoles = append(userRoles, controller.ROLE(r.Role))
+		}
+
+		c.Set("UserId", account.ID)
+		c.Set("IsAdministrator", account.IsAdministrator)
+		c.Set("UserRoles", userRoles)
+		return next(c)
+	}
+}
+
+func (session *Session) validate(c echo.Context) error {
+	ipAddr := pqtype.Inet{}
+	ipAddr.Scan(c.RealIP())
+
+	if session.IpAddr != ipAddr.IPNet.String() {
+		return errors.New("Ip address does not match.")
+	}
+
+	if session.UserAgent != c.Request().UserAgent() {
+		return errors.New("User agent does not match.")
+	}
+
+	expiredAt := time.Unix(session.ExpiredAt, 0)
+	if expiredAt.Before(time.Now()) {
+		return errors.New("Session expired, please login again.")
+	}
+
+	return nil
+}
+
+func parseDbSession(loginSession *database.LoginSession) *Session {
+	var userAgent string
+	if loginSession.UserAgent.Valid {
+		userAgent = loginSession.UserAgent.String
+	}
+	return &Session{
+		SessionID: loginSession.SessionID,
+		UserID:    loginSession.UserID.String(),
+		IpAddr:    loginSession.IpAddr.IPNet.String(),
+		UserAgent: userAgent,
+		ExpiredAt: loginSession.ExpiredAt.Unix(),
+	}
+}
