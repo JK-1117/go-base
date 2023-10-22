@@ -65,14 +65,31 @@ Here are some optional configurations that you may want to customize for your pr
 
 - [.env](/backend/.env)
 
-  - Required variables include:
-    - APPNAME - the name of your project (e.g., `APPNAME=base`).
-    - PORT - the port where your backend will run (e.g., `PORT=8080`).
-    - DOMAIN - the domain for your production backend (e.g., `DOMAIN=localhost`).
-    - REDIS_URL - the URL for connecting to your Redis instance (e.g., `REDIS_URL=redis://localhost:6379/0`).
-    - DB_URL - the URL for connecting to your PostgreSQL database (e.g., `DB_URL=postgres://ops:OnlyADevPasswOrD@localhost:5432/ops?sslmode=disable`).
-    - COOKIE_HASHKEY - the hashKey used to authenticate the cookie value using HMAC (for [more information](https://github.com/gorilla/securecookie#examples), e.g., `COOKIE_HASHKEY=veryverylongsecretwith64length`).
-    - COOKIE_BLOCKKEY - the blockKey used to encrypt the cookie value (for [more information](https://github.com/gorilla/securecookie#examples) e.g., `COOKIE_BLOCKKEY=secretwith32length`).
+  To configure your project properly, you need to create a `.env` file in the `/backend/` directory. This file will contain important environment variables required for your project's operation. Here are the necessary variables to include in your `.env` file:
+
+  - `APPNAME`: This variable should specify the name of your project.
+  - `PORT`: Set this variable to define the port on which your backend will run.
+  - `DOMAIN`: Specify the domain for your production backend.
+  - `REDIS_URL`: This variable should hold the URL for connecting to your Redis instance.
+  - `DB_URL`: Set this variable to contain the URL for connecting to your PostgreSQL database.
+  - `COOKIE_HASHKEY`: Provide a strong hash key for authenticating cookie values using HMAC (for [more information](https://github.com/gorilla/securecookie#examples)).
+  - `COOKIE_BLOCKKEY`: Define a block key for encrypting cookie values (for [more information](https://github.com/gorilla/securecookie#examples)).
+
+  Here's an example of how your `.env` file should look:
+
+  ```env
+  # /backend/.env
+
+  APPNAME=base
+  PORT=8080
+  DOMAIN=localhost
+
+  REDIS_URL=redis://localhost:6379/0
+  DB_URL=postgres://ops:OnlyADevPasswOrD@localhost:5432/ops?sslmode=disable
+
+  COOKIE_HASHKEY=your_cookie_hash_key_here
+  COOKIE_BLOCKKEY=your_cookie_block_key_here
+  ```
 
 - [docker-compose.yaml](/docker-compose.yaml)
 
