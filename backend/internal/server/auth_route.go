@@ -12,8 +12,8 @@ import (
 
 func (r *Router) UseAuthRoute() {
 	r.Router.POST("/signup", r.SignUp)
-
 	r.Router.POST("/login", r.LogIn)
+	r.Router.POST("/logout", r.LogOut)
 }
 
 func (r *Router) SignUp(c echo.Context) error {
@@ -61,4 +61,16 @@ func (r *Router) LogIn(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, account)
+}
+
+func (r *Router) LogOut(c echo.Context) error {
+	c.SetCookie(&http.Cookie{
+		Name:     SESSIONCOOKIE,
+		HttpOnly: true,
+		Secure:   true,
+		MaxAge:   -1,
+		Value:    "",
+	})
+
+	return c.NoContent(http.StatusOK)
 }
