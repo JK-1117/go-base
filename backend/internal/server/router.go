@@ -8,7 +8,7 @@ import (
 
 	"github.com/jk1117/go-base/internal/controller"
 	"github.com/jk1117/go-base/internal/database"
-	"github.com/jk1117/go-base/internal/logger"
+	logging "github.com/jk1117/go-base/internal/logger"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/redis/go-redis/v9"
@@ -22,7 +22,7 @@ type Router struct {
 }
 
 func NewRouter(db *sql.DB, q *database.Queries, redis *redis.Client) *Router {
-	Logger, _ := logger.GetLogger()
+	logger, _ := logging.GetLogger()
 
 	e := echo.New()
 	// e.Pre(middleware.HTTPSRedirect())
@@ -46,9 +46,9 @@ func NewRouter(db *sql.DB, q *database.Queries, redis *redis.Client) *Router {
 				v.Error, v.Host, v.RemoteIP, v.UserAgent, v.Latency,
 			)
 			if v.Status == http.StatusInternalServerError {
-				Logger.Echo.Err(msg)
+				logger.Echo.Err(msg)
 			} else {
-				Logger.Echo.Err(msg)
+				logger.Echo.Err(msg)
 			}
 			return nil
 		},

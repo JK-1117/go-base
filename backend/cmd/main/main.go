@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/jk1117/go-base/internal/database"
-	"github.com/jk1117/go-base/internal/logger"
+	logging "github.com/jk1117/go-base/internal/logger"
 	"github.com/jk1117/go-base/internal/server"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
@@ -48,7 +48,7 @@ func main() {
 	}
 	client := redis.NewClient(opt)
 
-	_, err = logger.GetLogger()
+	_, err = logging.GetLogger()
 	if err != nil {
 		log.Fatal(err)
 	}

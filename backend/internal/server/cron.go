@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/jk1117/go-base/internal/database"
-	"github.com/jk1117/go-base/internal/logger"
+	logging "github.com/jk1117/go-base/internal/logger"
 	"github.com/robfig/cron/v3"
 )
 
@@ -22,12 +22,12 @@ var cFile *os.File
 
 func NewCron(q *database.Queries) *CronJob {
 	my, _ := time.LoadLocation("Asia/Kuala_Lumpur")
-	Logger, _ := logger.GetLogger()
+	logger, _ := logging.GetLogger()
 
 	appname := os.Getenv("APPNAME")
 	cFile, err := os.OpenFile(fmt.Sprintf("./logs/%v_schedule.txt", appname), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		Logger.Cron.Err(err.Error())
+		logger.Cron.Err(err.Error())
 	}
 	cWriter := io.MultiWriter(os.Stdout, cFile)
 	cLogger := log.New(cWriter, "cron: ", log.LstdFlags)
@@ -57,21 +57,21 @@ func (job *CronJob) Stop() context.Context {
 }
 
 func (job *CronJob) CleanInvalidSession() {
-	Logger, _ := logger.GetLogger()
-	Logger.Cron.Info(fmt.Sprintf("STARTING CleanInvalidSession"))
+	logger, _ := logging.GetLogger()
+	logger.Cron.Info(fmt.Sprintf("STARTING CleanInvalidSession"))
 	if err := job.q.DeleteExpiredSession(context.Background()); err != nil {
-		Logger.Cron.Err(fmt.Sprintf("CleanInvalidSession: %v", err))
+		logger.Cron.Err(fmt.Sprintf("CleanInvalidSession: %v", err))
 		return
 	}
-	Logger.Cron.Info(fmt.Sprintf("COMPLETED CleanInvalidSession"))
+	logger.Cron.Info(fmt.Sprintf("COMPLETED CleanInvalidSession"))
 }
 
 func (job *CronJob) RotateLogFiles() {
-	Logger, _ := logger.GetLogger()
-	Logger.Cron.Info(fmt.Sprintf("STARTING RotateLogFiles"))
-	if err := Logger.RotateLogFiles(); err != nil {
-		Logger.Cron.Err(fmt.Sprintf("RotateLogFiles: %v", err))
+	logger, _ := logging.GetLogger()
+	logger.Cron.Info(fmt.Sprintf("STARTING RotateLogFiles"))
+	if err := logger.RotateLogFiles(); err != nil {
+		logger.Cron.Err(fmt.Sprintf("RotateLogFiles: %v", err))
 		return
 	}
-	Logger.Cron.Info(fmt.Sprintf("COMPLETED RotateLogFiles"))
+	logger.Cron.Info(fmt.Sprintf("COMPLETED RotateLogFiles"))
 }

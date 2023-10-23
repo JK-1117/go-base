@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jk1117/go-base/internal/database"
-	"github.com/jk1117/go-base/internal/logger"
+	logging "github.com/jk1117/go-base/internal/logger"
 	"github.com/labstack/echo/v4"
 	"github.com/sqlc-dev/pqtype"
 	passwordvalidator "github.com/wagslane/go-password-validator"
@@ -58,7 +58,7 @@ type SignUpParams struct {
 }
 
 func (controller *Controller) SignUp(c echo.Context, params SignUpParams) (uuid.UUID, error) {
-	Logger, _ := logger.GetLogger()
+	logger, _ := logging.GetLogger()
 	err := validateCreateAccount(params.Password, params.Email)
 	if err != nil {
 		return uuid.Nil, err
@@ -70,7 +70,7 @@ func (controller *Controller) SignUp(c echo.Context, params SignUpParams) (uuid.
 
 	tx, err := controller.db.Begin()
 	if err != nil {
-		Logger.App.Err(fmt.Sprintf("Error Creating Account, error: %v, payload: %v", err, params))
+		logger.App.Err(fmt.Sprintf("Error Creating Account, error: %v, payload: %v", err, params))
 		return uuid.Nil, errors.New("Something went wrong, try again later.")
 	}
 	defer tx.Rollback()
@@ -99,7 +99,7 @@ func (controller *Controller) SignUp(c echo.Context, params SignUpParams) (uuid.
 		IsAdministrator: false,
 	})
 	if err != nil {
-		Logger.App.Err(fmt.Sprintf("Error Creating Account, error: %v, payload: %v", err, params))
+		logger.App.Err(fmt.Sprintf("Error Creating Account, error: %v, payload: %v", err, params))
 		return uuid.Nil, errors.New("Something went wrong, try again later.")
 	}
 
@@ -108,12 +108,12 @@ func (controller *Controller) SignUp(c echo.Context, params SignUpParams) (uuid.
 		Role:   string(CLIENT),
 	})
 	if err != nil {
-		Logger.App.Err(fmt.Sprintf("Error Creating User Role, error: %v, payload: %v", err, params))
+		logger.App.Err(fmt.Sprintf("Error Creating User Role, error: %v, payload: %v", err, params))
 		return uuid.Nil, errors.New("Something went wrong, try again later.")
 	}
 
 	if err = tx.Commit(); err != nil {
-		Logger.App.Err(fmt.Sprintf("Error Commiting SignUp, error: %v, payload: %v", err, params))
+		logger.App.Err(fmt.Sprintf("Error Commiting SignUp, error: %v, payload: %v", err, params))
 		return uuid.Nil, errors.New("Something went wrong, try again later.")
 	}
 	return account.ID, nil
