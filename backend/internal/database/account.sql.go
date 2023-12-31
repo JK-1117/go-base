@@ -73,6 +73,18 @@ func (q *Queries) GetAccountByEmail(ctx context.Context, email string) (Account,
 	return i, err
 }
 
+const getAccountIdByEmail = `-- name: GetAccountIdByEmail :one
+SELECT id FROM account
+WHERE email=$1 AND active=TRUE
+`
+
+func (q *Queries) GetAccountIdByEmail(ctx context.Context, email string) (uuid.UUID, error) {
+	row := q.db.QueryRowContext(ctx, getAccountIdByEmail, email)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getActiveAccountById = `-- name: GetActiveAccountById :one
 SELECT id, created_at, updated_at, email, password, first_name, last_name, is_administrator, active FROM account
 WHERE id=$1 and active=TRUE

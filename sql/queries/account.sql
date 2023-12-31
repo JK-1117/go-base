@@ -10,3 +10,7 @@ WHERE email=$1;
 -- name: GetActiveAccountById :one
 SELECT * FROM account
 WHERE id=$1 and active=TRUE;
+
+-- name: GetAccountIdByEmail :one
+SELECT id FROM account
+WHERE email=$1 AND active=TRUE;

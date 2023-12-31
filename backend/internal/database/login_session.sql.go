@@ -15,9 +15,9 @@ import (
 )
 
 const createLoginSession = `-- name: CreateLoginSession :one
-INSERT INTO login_session (session_id, user_id, last_login, ip_addr, user_agent, expired_at)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING session_id, created_at, updated_at, user_id, last_login, ip_addr, user_agent, expired_at, csrf
+INSERT INTO login_session (session_id, user_id, last_login, ip_addr, user_agent, expired_at, is_reset_session)
+VALUES ($1, $2, $3, $4, $5, $6, FALSE)
+RETURNING session_id, created_at, updated_at, user_id, last_login, ip_addr, user_agent, expired_at, is_reset_session
 `
 
 type CreateLoginSessionParams struct {
@@ -48,7 +48,46 @@ func (q *Queries) CreateLoginSession(ctx context.Context, arg CreateLoginSession
 		&i.IpAddr,
 		&i.UserAgent,
 		&i.ExpiredAt,
-		&i.Csrf,
+		&i.IsResetSession,
+	)
+	return i, err
+}
+
+const createResetSession = `-- name: CreateResetSession :one
+INSERT INTO login_session (session_id, user_id, last_login, ip_addr, user_agent, expired_at, is_reset_session)
+VALUES ($1, $2, $3, $4, $5, $6, TRUE)
+RETURNING session_id, created_at, updated_at, user_id, last_login, ip_addr, user_agent, expired_at, is_reset_session
+`
+
+type CreateResetSessionParams struct {
+	SessionID string
+	UserID    uuid.UUID
+	LastLogin time.Time
+	IpAddr    pqtype.Inet
+	UserAgent sql.NullString
+	ExpiredAt time.Time
+}
+
+func (q *Queries) CreateResetSession(ctx context.Context, arg CreateResetSessionParams) (LoginSession, error) {
+	row := q.db.QueryRowContext(ctx, createResetSession,
+		arg.SessionID,
+		arg.UserID,
+		arg.LastLogin,
+		arg.IpAddr,
+		arg.UserAgent,
+		arg.ExpiredAt,
+	)
+	var i LoginSession
+	err := row.Scan(
+		&i.SessionID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.UserID,
+		&i.LastLogin,
+		&i.IpAddr,
+		&i.UserAgent,
+		&i.ExpiredAt,
+		&i.IsResetSession,
 	)
 	return i, err
 }
@@ -72,7 +111,7 @@ func (q *Queries) DeleteSessionBySessionId(ctx context.Context, sessionID string
 }
 
 const getSessionBySessionId = `-- name: GetSessionBySessionId :one
-SELECT session_id, created_at, updated_at, user_id, last_login, ip_addr, user_agent, expired_at, csrf FROM login_session WHERE session_id=$1
+SELECT session_id, created_at, updated_at, user_id, last_login, ip_addr, user_agent, expired_at, is_reset_session FROM login_session WHERE session_id=$1 AND is_reset_session IS NOT TRUE
 `
 
 func (q *Queries) GetSessionBySessionId(ctx context.Context, sessionID string) (LoginSession, error) {
@@ -87,7 +126,7 @@ func (q *Queries) GetSessionBySessionId(ctx context.Context, sessionID string) (
 		&i.IpAddr,
 		&i.UserAgent,
 		&i.ExpiredAt,
-		&i.Csrf,
+		&i.IsResetSession,
 	)
 	return i, err
 }

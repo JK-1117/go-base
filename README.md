@@ -23,6 +23,7 @@ Please make sure you have the following dependencies installed:
 - [Go](https://go.dev/doc/install)
 - [Docker](https://docs.docker.com/engine/install/) (for running databases in a development environment)
 - [Make](https://www.gnu.org/software/make/) (used for predefined commands in [Makefile](/Makefile))
+- [goose](#goose)
 
 ## Installation and Setup
 
@@ -67,7 +68,6 @@ Here are some optional configurations that you may want to customize for your pr
 
   To configure your project properly, you need to create a `.env` file in the `/backend/` directory. This file will contain important environment variables required for your project's operation. Here are the necessary variables to include in your `.env` file:
 
-  - `APPNAME`: This variable should specify the name of your project.
   - `PORT`: Set this variable to define the port on which your backend will run.
   - `DOMAIN`: Specify the domain for your production backend.
   - `REDIS_URL`: This variable should hold the URL for connecting to your Redis instance.
@@ -80,7 +80,6 @@ Here are some optional configurations that you may want to customize for your pr
   ```env
   # /backend/.env
 
-  APPNAME=base
   PORT=8080
   DOMAIN=localhost
 
@@ -101,6 +100,10 @@ Here are some optional configurations that you may want to customize for your pr
 
 - Session Cookie Name
   - You can change the session ID's cookie name by modifying the SESSIONCOOKIE constant in [session.go](/backend//internal/server/session.go)
+
+## goose
+
+For Windows user, you should download the [executable release](https://github.com/pressly/goose/releases) and place it inside [./backend/bin](#backend/bin/) folder. You may refer to [pressly/goose](https://github.com/pressly/goose) for installation instruction on different operating system.
 
 ## Contributing
 

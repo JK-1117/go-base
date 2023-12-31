@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/jk1117/go-base/internal/controller"
-	"github.com/jk1117/go-base/internal/database"
-	logging "github.com/jk1117/go-base/internal/logger"
+	"github.com/JK-1117/go-htmx-base/internal/controller"
+	"github.com/JK-1117/go-htmx-base/internal/database"
+	logging "github.com/JK-1117/go-htmx-base/internal/logger"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/redis/go-redis/v9"
@@ -48,12 +48,12 @@ func NewRouter(db *sql.DB, q *database.Queries, redis *redis.Client) *Router {
 			if v.Status == http.StatusInternalServerError {
 				logger.Echo.Err(msg)
 			} else {
-				logger.Echo.Err(msg)
+				logger.Echo.Info(msg)
 			}
 			return nil
 		},
 	}))
-	e.Use(middleware.Recover())
+	// e.Use(middleware.Recover())
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		// AllowOrigins: []string{"https://labstack.com", "https://labstack.net"},
 		AllowMethods: []string{http.MethodGet, http.MethodPut, http.MethodPost, http.MethodDelete, http.MethodOptions, http.MethodHead},
@@ -65,7 +65,7 @@ func NewRouter(db *sql.DB, q *database.Queries, redis *redis.Client) *Router {
 		ContentSecurityPolicy: "default-src 'self'",
 	}))
 
-	controller := controller.NewController(db, q)
+	controller := controller.NewController(db, q, redis)
 	store := NewSessionStore(q, redis)
 
 	v1Router := e.Group("/v1")

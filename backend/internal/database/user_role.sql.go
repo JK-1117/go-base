@@ -19,7 +19,7 @@ RETURNING user_id, role, created_at, updated_at
 
 type CreateUserRoleParams struct {
 	UserID uuid.UUID
-	Role   string
+	Role   RoleEnum
 }
 
 func (q *Queries) CreateUserRole(ctx context.Context, arg CreateUserRoleParams) (UserRole, error) {

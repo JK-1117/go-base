@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"database/sql"
 	"encoding/base32"
 	"errors"
 	"fmt"
@@ -10,10 +9,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/JK-1117/go-htmx-base/internal/database"
+	"github.com/JK-1117/go-htmx-base/internal/helper"
 	"github.com/google/uuid"
 	"github.com/gorilla/securecookie"
-	"github.com/jk1117/go-base/internal/controller"
-	"github.com/jk1117/go-base/internal/database"
 	"github.com/labstack/echo/v4"
 	"github.com/redis/go-redis/v9"
 	"github.com/sqlc-dev/pqtype"
@@ -35,8 +34,6 @@ type Session struct {
 const SESSIONCOOKIE = "X-APP-SID"
 const SESSION_DURATION = 4 * time.Hour
 const TIMEOUT = 2 * time.Second
-
-var base32RawStdEncoding = base32.StdEncoding.WithPadding(base32.NoPadding)
 
 func NewSessionStore(q *database.Queries, rdb *redis.Client) *SessionStore {
 	var COOKIE_HASHKEY string = os.Getenv("COOKIE_HASHKEY")
@@ -99,12 +96,9 @@ func (store *SessionStore) Get(c echo.Context) (*Session, error) {
 }
 
 func (store *SessionStore) NewSession(c echo.Context, userId uuid.UUID) (*Session, error) {
+	var base32RawStdEncoding = base32.StdEncoding.WithPadding(base32.NoPadding)
 	sid := base32RawStdEncoding.EncodeToString(securecookie.GenerateRandomKey(32))
-	userAgent := sql.NullString{}
-	if c.Request().UserAgent() != "" {
-		userAgent.String = c.Request().UserAgent()
-		userAgent.Valid = true
-	}
+	userAgent := helper.GetNullString(c.Request().UserAgent())
 	ipAddr := pqtype.Inet{}
 	ipAddr.Scan(c.RealIP())
 	loginSession, err := store.q.CreateLoginSession(c.Request().Context(), database.CreateLoginSessionParams{
@@ -116,17 +110,18 @@ func (store *SessionStore) NewSession(c echo.Context, userId uuid.UUID) (*Sessio
 		IpAddr:    ipAddr,
 	})
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Error Creating Session, error: %v", err))
+		return nil, errors.New(fmt.Sprintf("error Creating Session, error: %v", err))
 	}
 
 	session := parseDbSession(&loginSession)
+
 	return store.Cache(c.Request().Context(), session)
 }
 
 func (store *SessionStore) Cache(c context.Context, session *Session) (*Session, error) {
 	err := store.rdb.HSet(c, "session:"+session.SessionID, session).Err()
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Error Creating Session, error: %v", err))
+		return nil, errors.New(fmt.Sprintf("error Creating Session, error: %v", err))
 	}
 	return session, nil
 }
@@ -172,14 +167,14 @@ func (store *SessionStore) SessionAuth(next echo.HandlerFunc) echo.HandlerFunc {
 		if err != nil {
 			return echo.NewHTTPError(http.StatusUnauthorized, errors.New("Session expired, try login again."))
 		}
-		var userRoles []controller.ROLE
+		var userRoles []database.RoleEnum
 		for _, r := range roles {
-			userRoles = append(userRoles, controller.ROLE(r.Role))
+			userRoles = append(userRoles, database.RoleEnum(r.Role))
 		}
 
-		c.Set("UserId", account.ID)
-		c.Set("IsAdministrator", account.IsAdministrator)
-		c.Set("UserRoles", userRoles)
+		c.Set(helper.C_USERID, account.ID)
+		c.Set(helper.C_ISADMIN, account.IsAdministrator)
+		c.Set(helper.C_USERROLES, userRoles)
 		return next(c)
 	}
 }
@@ -205,10 +200,7 @@ func (session *Session) validate(c echo.Context) error {
 }
 
 func parseDbSession(loginSession *database.LoginSession) *Session {
-	var userAgent string
-	if loginSession.UserAgent.Valid {
-		userAgent = loginSession.UserAgent.String
-	}
+	userAgent := helper.ParseNullString(loginSession.UserAgent)
 	return &Session{
 		SessionID: loginSession.SessionID,
 		UserID:    loginSession.UserID.String(),

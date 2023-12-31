@@ -6,11 +6,55 @@ package database
 
 import (
 	"database/sql"
+	"database/sql/driver"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/sqlc-dev/pqtype"
 )
+
+type RoleEnum string
+
+const (
+	RoleEnumCLIENT RoleEnum = "CLIENT"
+	RoleEnumADMIN  RoleEnum = "ADMIN"
+)
+
+func (e *RoleEnum) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = RoleEnum(s)
+	case string:
+		*e = RoleEnum(s)
+	default:
+		return fmt.Errorf("unsupported scan type for RoleEnum: %T", src)
+	}
+	return nil
+}
+
+type NullRoleEnum struct {
+	RoleEnum RoleEnum
+	Valid    bool // Valid is true if RoleEnum is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullRoleEnum) Scan(value interface{}) error {
+	if value == nil {
+		ns.RoleEnum, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.RoleEnum.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullRoleEnum) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.RoleEnum), nil
+}
 
 type Account struct {
 	ID              uuid.UUID
@@ -25,28 +69,28 @@ type Account struct {
 }
 
 type LoginSession struct {
-	SessionID string
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	UserID    uuid.UUID
-	LastLogin time.Time
-	IpAddr    pqtype.Inet
-	UserAgent sql.NullString
-	ExpiredAt time.Time
-	Csrf      sql.NullString
+	SessionID      string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	UserID         uuid.UUID
+	LastLogin      time.Time
+	IpAddr         pqtype.Inet
+	UserAgent      sql.NullString
+	ExpiredAt      time.Time
+	IsResetSession sql.NullBool
 }
 
 type RolePermission struct {
 	ID          int32
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
-	Role        string
+	Role        RoleEnum
 	Permissions pqtype.NullRawMessage
 }
 
 type UserRole struct {
 	UserID    uuid.UUID
-	Role      string
+	Role      RoleEnum
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }

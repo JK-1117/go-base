@@ -49,28 +49,27 @@ func (l *Logger) init() error {
 	if err != nil {
 		return err
 	}
-	appname := os.Getenv("APPNAME")
 
-	cFile, err := os.OpenFile(fmt.Sprintf("./logs/%v_cron.txt", appname), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	cFile, err := os.OpenFile("./logs/cron.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
 	cFileLogger := log.New(cFile, "cron: ", log.LstdFlags)
 	cLogger := log.New(os.Stdout, "cron: ", log.LstdFlags)
 
-	eFile, err := os.OpenFile(fmt.Sprintf("./logs/%v_echo.txt", appname), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	eFile, err := os.OpenFile("./logs/echo.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
 	eFileLogger := log.New(eFile, "echo: ", log.LstdFlags)
 	eLogger := log.New(os.Stdout, Blue("echo: "), log.LstdFlags)
 
-	oFile, err := os.OpenFile(fmt.Sprintf("./logs/%v.txt", appname), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	oFile, err := os.OpenFile("./logs/app.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
-	oFileLogger := log.New(oFile, appname+": ", log.LstdFlags)
-	oLogger := log.New(os.Stdout, Magenta(appname+": "), log.LstdFlags)
+	oFileLogger := log.New(oFile, "app: ", log.LstdFlags)
+	oLogger := log.New(os.Stdout, Magenta("app: "), log.LstdFlags)
 
 	l.Cron = &LoggerGroup{
 		logger:     cLogger,
@@ -96,14 +95,13 @@ func (l *Logger) RotateLogFiles() error {
 
 	l.Close()
 
-	appname := os.Getenv("APPNAME")
-	if err := os.Rename(fmt.Sprintf("./logs/%v_cron.txt", appname), fmt.Sprintf("./logs/app_cron_%v.txt", time.Now())); err != nil {
+	if err := os.Rename("./logs/cron.txt", fmt.Sprintf("./logs/cron_%v.txt", time.Now())); err != nil {
 		return err
 	}
-	if err := os.Rename(fmt.Sprintf("./logs/%v_echo.txt", appname), fmt.Sprintf("./logs/app_echo_%v.txt", time.Now())); err != nil {
+	if err := os.Rename("./logs/echo.txt", fmt.Sprintf("./logs/echo_%v.txt", time.Now())); err != nil {
 		return err
 	}
-	if err := os.Rename(fmt.Sprintf("./logs/%v.txt", appname), fmt.Sprintf("./logs/app_%v.txt", time.Now())); err != nil {
+	if err := os.Rename("./logs/app.txt", fmt.Sprintf("./logs/app_%v.txt", time.Now())); err != nil {
 		return err
 	}
 
@@ -130,17 +128,18 @@ func (l *LoggerGroup) Debug(msg string) {
 
 func (l *LoggerGroup) println(level LogLevel, msg string) {
 	levelStr := "[ " + string(level) + " ]"
+	if level == ERROR {
+		levelStr = RedBg(levelStr)
+	}
+	if level == DEBUG {
+		levelStr = YellowBg(levelStr)
+	}
 	l.logger.Println(fmt.Sprintf("%s %s", levelStr, msg))
 
 	if os.Getenv("APP_ENV") == "production" {
 		lock.Lock()
 		defer lock.Unlock()
-		if level == ERROR {
-			levelStr = RedBg(levelStr)
-		}
-		if level == DEBUG {
-			levelStr = YellowBg(levelStr)
-		}
+		levelStr := "[ " + string(level) + " ]"
 
 		l.fileLogger.Println(fmt.Sprintf("%s %s", levelStr, msg))
 	}
