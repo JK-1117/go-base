@@ -1,8 +1,8 @@
 package controller
 
 import (
-	"github.com/JK-1117/go-htmx-base/internal/helper"
-	logging "github.com/JK-1117/go-htmx-base/internal/logger"
+	"github.com/JK-1117/go-base/internal/helper"
+	logging "github.com/JK-1117/go-base/internal/logger"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 )

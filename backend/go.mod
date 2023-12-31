@@ -1,4 +1,4 @@
-module github.com/jk1117/go-base
+module github.com/JK-1117/go-base
 
 go 1.21.1
 

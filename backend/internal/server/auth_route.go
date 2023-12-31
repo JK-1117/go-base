@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/JK-1117/go-htmx-base/internal/controller"
-	"github.com/JK-1117/go-htmx-base/internal/database"
-	"github.com/JK-1117/go-htmx-base/internal/helper"
-	logging "github.com/JK-1117/go-htmx-base/internal/logger"
+	"github.com/JK-1117/go-base/internal/controller"
+	"github.com/JK-1117/go-base/internal/database"
+	"github.com/JK-1117/go-base/internal/helper"
+	logging "github.com/JK-1117/go-base/internal/logger"
 	"github.com/labstack/echo/v4"
 )
 

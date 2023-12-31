@@ -5,9 +5,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/jk1117/go-base/internal/database"
-	logging "github.com/jk1117/go-base/internal/logger"
-	"github.com/jk1117/go-base/internal/server"
+	"github.com/JK-1117/go-base/internal/database"
+	logging "github.com/JK-1117/go-base/internal/logger"
+	"github.com/JK-1117/go-base/internal/server"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/redis/go-redis/v9"

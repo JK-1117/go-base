@@ -3,7 +3,7 @@ package controller
 import (
 	"database/sql"
 
-	"github.com/JK-1117/go-htmx-base/internal/database"
+	"github.com/JK-1117/go-base/internal/database"
 	"github.com/redis/go-redis/v9"
 )
 

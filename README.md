@@ -96,7 +96,7 @@ Here are some optional configurations that you may want to customize for your pr
 
 - Module name
 
-  - Replace "github.com/jk1117/go-base" with your module name.
+  - Replace "github.com/JK-1117/go-base" with your module name.
 
 - Session Cookie Name
   - You can change the session ID's cookie name by modifying the SESSIONCOOKIE constant in [session.go](/backend//internal/server/session.go)

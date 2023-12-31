@@ -3,8 +3,8 @@ package server
 import (
 	"net/http"
 
-	"github.com/JK-1117/go-htmx-base/internal/controller"
-	"github.com/JK-1117/go-htmx-base/internal/helper"
+	"github.com/JK-1117/go-base/internal/controller"
+	"github.com/JK-1117/go-base/internal/helper"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 )

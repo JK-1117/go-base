@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/JK-1117/go-htmx-base/internal/controller"
-	"github.com/JK-1117/go-htmx-base/internal/database"
-	logging "github.com/JK-1117/go-htmx-base/internal/logger"
+	"github.com/JK-1117/go-base/internal/controller"
+	"github.com/JK-1117/go-base/internal/database"
+	logging "github.com/JK-1117/go-base/internal/logger"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/redis/go-redis/v9"

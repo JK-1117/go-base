@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	logging "github.com/JK-1117/go-htmx-base/internal/logger"
+	logging "github.com/JK-1117/go-base/internal/logger"
 )
 
 type MailService struct {

@@ -9,8 +9,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/JK-1117/go-htmx-base/internal/database"
-	"github.com/JK-1117/go-htmx-base/internal/helper"
+	"github.com/JK-1117/go-base/internal/database"
+	"github.com/JK-1117/go-base/internal/helper"
 	"github.com/google/uuid"
 	"github.com/gorilla/securecookie"
 	"github.com/labstack/echo/v4"
