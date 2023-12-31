@@ -3,27 +3,59 @@ package server
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
 	"time"
 
-	"github.com/JK-1117/go-base/internal/controller"
 	"github.com/JK-1117/go-base/internal/database"
 	logging "github.com/JK-1117/go-base/internal/logger"
+	"github.com/JK-1117/go-base/internal/router"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	_ "github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
 )
 
-type Router struct {
-	Echo         *echo.Echo
-	Router       *echo.Group
-	Controller   *controller.Controller
-	SessionStore *SessionStore
+type App struct {
+	auth    *router.AuthRouter
+	account *router.AccountRouter
 }
 
-func NewRouter(db *sql.DB, q *database.Queries, redis *redis.Client) *Router {
-	logger, _ := logging.GetLogger()
+func NewApp() *App {
+	db, q, rdb := initDB()
 
+	cron := NewCron(q)
+	cron.Start()
+	defer cron.Stop()
+
+	authRouter := router.NewAuthRouter(db, q, rdb)
+	accountRouter := router.NewAccountRouter(db, q)
+
+	return &App{
+		auth:    authRouter,
+		account: accountRouter,
+	}
+}
+
+func (app *App) Run(port string) {
+	e := initServer()
+	v1Router := e.Group("/v1")
+
+	app.auth.RegisterRoute(v1Router)
+	// Only apply csrf and authentication after auth routes
+	v1Router.Use(middleware.CSRFWithConfig(middleware.CSRFConfig{
+		TokenLookup:    "header:X-XSRF-TOKEN",
+		CookieSameSite: http.SameSiteLaxMode,
+	}))
+	v1Router.Use(app.auth.SessionStore.SessionAuth)
+	app.account.RegisterRoute(v1Router, app.auth)
+
+	e.Logger.Fatal(e.Start(":" + port))
+}
+
+func initServer() *echo.Echo {
+	logger, _ := logging.GetLogger()
 	e := echo.New()
 	// e.Pre(middleware.HTTPSRedirect())
 	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
@@ -65,28 +97,30 @@ func NewRouter(db *sql.DB, q *database.Queries, redis *redis.Client) *Router {
 		ContentSecurityPolicy: "default-src 'self'",
 	}))
 
-	controller := controller.NewController(db, q, redis)
-	store := NewSessionStore(q, redis)
-
-	v1Router := e.Group("/v1")
-
-	router := Router{
-		Echo:         e,
-		Router:       v1Router,
-		Controller:   controller,
-		SessionStore: store,
-	}
-	router.UseAuthRoute()
-	v1Router.Use(middleware.CSRFWithConfig(middleware.CSRFConfig{
-		TokenLookup:    "header:X-XSRF-TOKEN",
-		CookieSameSite: http.SameSiteLaxMode,
-	}))
-	v1Router.Use(store.SessionAuth)
-	router.UseAccountRoute()
-
-	return &router
+	return e
 }
 
-func (router *Router) Serve(port string) {
-	router.Echo.Logger.Fatal(router.Echo.Start(":" + port))
+func initDB() (*sql.DB, *database.Queries, *redis.Client) {
+	dbURL := os.Getenv("DB_URL")
+	if dbURL == "" {
+		log.Fatal("DB_URL is not found in the environment")
+	}
+	redisString := os.Getenv("REDIS_URL")
+	if redisString == "" {
+		log.Fatal("REDIS_URL is not found in the environment")
+	}
+
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		log.Fatal("Can't connect to database:", err)
+	}
+	q := database.New(db)
+
+	opt, err := redis.ParseURL(redisString)
+	if err != nil {
+		log.Fatal("Could not connect to redis")
+	}
+	rdb := redis.NewClient(opt)
+
+	return db, q, rdb
 }

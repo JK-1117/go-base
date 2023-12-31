@@ -1,13 +1,28 @@
-package controller
+package services
 
 import (
+	"database/sql"
+
+	"github.com/JK-1117/go-base/internal/database"
 	"github.com/JK-1117/go-base/internal/helper"
 	logging "github.com/JK-1117/go-base/internal/logger"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 )
 
-func (controller *Controller) GetAccount(c echo.Context, userId string) (*Account, error) {
+type AccountService struct {
+	db *sql.DB
+	q  *database.Queries
+}
+
+func NewAccountService(db *sql.DB, q *database.Queries) *AccountService {
+	return &AccountService{
+		db: db,
+		q:  q,
+	}
+}
+
+func (service *AccountService) GetAccount(c echo.Context, userId string) (*Account, error) {
 	logger, _ := logging.GetLogger()
 	perm := c.Get(helper.C_PERMISSION).(Permission)
 	uid, err := uuid.Parse(userId)
@@ -20,7 +35,7 @@ func (controller *Controller) GetAccount(c echo.Context, userId string) (*Accoun
 		return nil, UnauthorizedError{}
 	}
 
-	account, err := controller.q.GetActiveAccountById(c.Request().Context(), uid)
+	account, err := service.q.GetActiveAccountById(c.Request().Context(), uid)
 	if err != nil {
 		logger.App.Err(err.Error())
 		return nil, err

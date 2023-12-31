@@ -1,33 +1,51 @@
-package server
+package router
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
 
-	"github.com/JK-1117/go-base/internal/controller"
 	"github.com/JK-1117/go-base/internal/database"
 	"github.com/JK-1117/go-base/internal/helper"
 	logging "github.com/JK-1117/go-base/internal/logger"
+	"github.com/JK-1117/go-base/internal/services"
+	"github.com/JK-1117/go-base/internal/session"
 	"github.com/labstack/echo/v4"
+	"github.com/redis/go-redis/v9"
 )
 
-func (r *Router) UseAuthRoute() {
-	r.Router.POST("/signup", r.SignUp)
-	r.Router.POST("/login", r.LogIn)
-	r.Router.POST("/logout", r.LogOut)
+type AuthRouter struct {
+	s            *services.AuthService
+	SessionStore *session.SessionStore
 }
 
-func (r *Router) SignUp(c echo.Context) error {
+func NewAuthRouter(db *sql.DB, q *database.Queries, rdb *redis.Client) *AuthRouter {
+	s := services.NewAuthService(db, q, rdb)
+	store := session.NewSessionStore(q, rdb)
+
+	return &AuthRouter{
+		s:            s,
+		SessionStore: store,
+	}
+}
+
+func (r *AuthRouter) RegisterRoute(router *echo.Group) {
+	router.POST("/signup", r.SignUp)
+	router.POST("/login", r.LogIn)
+	router.POST("/logout", r.LogOut)
+}
+
+func (r *AuthRouter) SignUp(c echo.Context) error {
 	logger, _ := logging.GetLogger()
 	decoder := json.NewDecoder(c.Request().Body)
-	params := controller.SignUpParams{}
+	params := services.SignUpParams{}
 	err := decoder.Decode(&params)
 	if err != nil {
 		logger.App.Err(err.Error())
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("error parsing JSON: %v", err))
 	}
-	user_id, err := r.Controller.SignUp(c, params)
+	user_id, err := r.s.SignUp(c, params)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err)
 	}
@@ -42,16 +60,16 @@ func (r *Router) SignUp(c echo.Context) error {
 	return c.NoContent(http.StatusCreated)
 }
 
-func (r *Router) LogIn(c echo.Context) error {
+func (r *AuthRouter) LogIn(c echo.Context) error {
 	logger, _ := logging.GetLogger()
 	decoder := json.NewDecoder(c.Request().Body)
-	params := controller.VerifyAccountParams{}
+	params := services.VerifyAccountParams{}
 	err := decoder.Decode(&params)
 	if err != nil {
 		logger.App.Err(err.Error())
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("error parsing JSON: %v", err))
 	}
-	account, err := r.Controller.VerifyAccount(c, params)
+	account, err := r.s.VerifyAccount(c, params)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, "Incorrect email or password.")
 	}
@@ -65,9 +83,9 @@ func (r *Router) LogIn(c echo.Context) error {
 	return c.JSON(http.StatusOK, account)
 }
 
-func (r *Router) LogOut(c echo.Context) error {
+func (r *AuthRouter) LogOut(c echo.Context) error {
 	c.SetCookie(&http.Cookie{
-		Name:     SESSIONCOOKIE,
+		Name:     session.SESSIONCOOKIE,
 		HttpOnly: true,
 		Secure:   true,
 		MaxAge:   -1,
@@ -77,30 +95,30 @@ func (r *Router) LogOut(c echo.Context) error {
 	return c.NoContent(http.StatusOK)
 }
 
-func (r *Router) ForgotPassword(c echo.Context) error {
+func (r *AuthRouter) ForgotPassword(c echo.Context) error {
 	logger, _ := logging.GetLogger()
 	decoder := json.NewDecoder(c.Request().Body)
-	params := controller.ForgotPasswordParams{}
+	params := services.ForgotPasswordParams{}
 	err := decoder.Decode(&params)
 	if err != nil {
 		logger.App.Err(err.Error())
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("error parsing JSON: %v", err))
 	}
-	if err = r.Controller.ForgotPassword(c, params); err != nil {
+	if err = r.s.ForgotPassword(c, params); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err)
 	}
 
 	return c.String(http.StatusOK, "An email will be sent to your email if an account is registered under it.")
 }
 
-func (r *Router) Authorization(resource string) echo.MiddlewareFunc {
+func (r *AuthRouter) Authorization(resource string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			if resource == "" {
 				return echo.NewHTTPError(http.StatusInternalServerError, "Resource missing for authorization.")
 			}
 
-			perm, err := r.Controller.GetResourcePermissions(c, controller.GetResourcePermissionsParams{
+			perm, err := r.s.GetResourcePermissions(c, services.GetResourcePermissionsParams{
 				Resource: resource,
 				Roles:    c.Get(helper.C_USERROLES).([]database.RoleEnum),
 			})
@@ -108,7 +126,7 @@ func (r *Router) Authorization(resource string) echo.MiddlewareFunc {
 				return echo.NewHTTPError(http.StatusInternalServerError, helper.ErrGeneralMsg)
 			}
 
-			if perm.Read == controller.RESTRICTED {
+			if perm.Read == services.RESTRICTED {
 				return echo.NewHTTPError(http.StatusForbidden, "You are not authorized to access this resource.")
 			}
 			c.Set(helper.C_PERMISSION, perm)

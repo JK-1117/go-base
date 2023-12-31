@@ -1,4 +1,4 @@
-package controller
+package services
 
 import (
 	"bytes"
@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/securecookie"
 	"github.com/labstack/echo/v4"
+	"github.com/redis/go-redis/v9"
 	"github.com/sqlc-dev/pqtype"
 	passwordvalidator "github.com/wagslane/go-password-validator"
 	"golang.org/x/crypto/bcrypt"
@@ -66,6 +67,20 @@ type Permission struct {
 
 const MIN_PASSWORD_ENTROPY = 60
 
+type AuthService struct {
+	db  *sql.DB
+	q   *database.Queries
+	rdb *redis.Client
+}
+
+func NewAuthService(db *sql.DB, q *database.Queries, rdb *redis.Client) *AuthService {
+	return &AuthService{
+		db:  db,
+		q:   q,
+		rdb: rdb,
+	}
+}
+
 type SignUpParams struct {
 	Password  string `json:"password"`
 	FirstName string `json:"first_name"`
@@ -73,24 +88,24 @@ type SignUpParams struct {
 	Email     string `json:"email"`
 }
 
-func (controller *Controller) SignUp(c echo.Context, params SignUpParams) (uuid.UUID, error) {
+func (service *AuthService) SignUp(c echo.Context, params SignUpParams) (uuid.UUID, error) {
 	logger, _ := logging.GetLogger()
 	err := validateCreateAccount(params.Password, params.Email)
 	if err != nil {
 		return uuid.Nil, err
 	}
-	_, err = controller.q.GetAccountByEmail(c.Request().Context(), params.Email)
+	_, err = service.q.GetAccountByEmail(c.Request().Context(), params.Email)
 	if err == nil {
 		return uuid.Nil, errors.New(fmt.Sprintf("User with email: %v already exists, please try login.", params.Email))
 	}
 
-	tx, err := controller.db.Begin()
+	tx, err := service.db.Begin()
 	if err != nil {
 		logger.App.Err(fmt.Sprintf("error Creating Account, error: %v, payload: %v", err, params))
 		return uuid.Nil, helper.ErrGeneral
 	}
 	defer tx.Rollback()
-	qtx := controller.q.WithTx(tx)
+	qtx := service.q.WithTx(tx)
 
 	passHash, err := bcrypt.GenerateFromPassword([]byte(params.Password), 10)
 	if err != nil {
@@ -128,9 +143,9 @@ func (controller *Controller) SignUp(c echo.Context, params SignUpParams) (uuid.
 	go func() {
 		m := GetMailService()
 		err := m.SendMail(MailHeader{
-			Subject: "Welcome to Online Printing System!",
+			Subject: "Welcome to Our System!",
 			To:      []string{account.Email},
-		}, fmt.Sprintf("Dear %s, \n Welcome to Online Printing System!&#127881; \n Your account is set up and ready to go. Start exploring our platform and make the most of it today. \n\n Best Regards,\n App Team", account.FirstName.String))
+		}, fmt.Sprintf("Dear %s, \n Welcome to Our System!&#127881; \n Your account is set up and ready to go. Start exploring our platform and make the most of it today. \n\n Best Regards,\n App Team", account.FirstName.String))
 		if err != nil {
 			logger.App.Err(fmt.Sprintf("error Sending Welcome Email, error: %v", err))
 		}
@@ -165,11 +180,11 @@ type VerifyAccountParams struct {
 	Email    string `json:"email"`
 }
 
-func (controller *Controller) VerifyAccount(c echo.Context, params VerifyAccountParams) (*Account, error) {
+func (service *AuthService) VerifyAccount(c echo.Context, params VerifyAccountParams) (*Account, error) {
 	if params.Password == "" || params.Email == "" {
 		return nil, errors.New("Incorrect email or password.")
 	}
-	account, err := controller.q.GetAccountByEmail(c.Request().Context(), params.Email)
+	account, err := service.q.GetAccountByEmail(c.Request().Context(), params.Email)
 	if err != nil {
 		return nil, err
 	}
@@ -185,16 +200,16 @@ type GetResourcePermissionsParams struct {
 	Roles    []database.RoleEnum `json:"roles"`
 }
 
-func (controller *Controller) GetResourcePermissions(c echo.Context, params GetResourcePermissionsParams) (Permission, error) {
+func (service *AuthService) GetResourcePermissions(c echo.Context, params GetResourcePermissionsParams) (Permission, error) {
 	logger, _ := logging.GetLogger()
 
 	var result Permission
 	for _, r := range params.Roles {
 		key := "permission:" + string(r)
-		cmd := controller.rdb.HGet(c.Request().Context(), key, params.Resource)
+		cmd := service.rdb.HGet(c.Request().Context(), key, params.Resource)
 		var perm Permission
 		if err := cmd.Err(); err != nil {
-			perm, err = controller.cachePermission(c.Request().Context(), r, params.Resource)
+			perm, err = service.cachePermission(c.Request().Context(), r, params.Resource)
 			if err != nil {
 				return result, err
 			}
@@ -213,7 +228,7 @@ func (controller *Controller) GetResourcePermissions(c echo.Context, params GetR
 			go func() {
 				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 				defer cancel()
-				controller.cachePermission(ctx, r, params.Resource)
+				service.cachePermission(ctx, r, params.Resource)
 			}()
 		}
 		result = MergePermission(result, perm)
@@ -227,7 +242,7 @@ type ForgotPasswordParams struct {
 	Redirect string `json:"redirect"`
 }
 
-func (controller *Controller) ForgotPassword(c echo.Context, params ForgotPasswordParams) error {
+func (service *AuthService) ForgotPassword(c echo.Context, params ForgotPasswordParams) error {
 	logger, _ := logging.GetLogger()
 
 	link, err := url.Parse(params.Redirect)
@@ -248,7 +263,7 @@ func (controller *Controller) ForgotPassword(c echo.Context, params ForgotPasswo
 	ipAddr := pqtype.Inet{}
 	ipAddr.Scan(c.RealIP())
 
-	account, err := controller.q.GetAccountByEmail(c.Request().Context(), params.Email)
+	account, err := service.q.GetAccountByEmail(c.Request().Context(), params.Email)
 	if err == sql.ErrNoRows {
 		logger.App.Err(fmt.Sprintf("account not found with emal: %v in ForgotPassword: %v", params.Email, err))
 		return nil
@@ -257,7 +272,7 @@ func (controller *Controller) ForgotPassword(c echo.Context, params ForgotPasswo
 		return helper.ErrGeneral
 	}
 
-	_, err = controller.q.CreateResetSession(c.Request().Context(), database.CreateResetSessionParams{
+	_, err = service.q.CreateResetSession(c.Request().Context(), database.CreateResetSessionParams{
 		SessionID: sid,
 		UserID:    account.ID,
 		LastLogin: time.Now(),
@@ -303,9 +318,9 @@ func (controller *Controller) ForgotPassword(c echo.Context, params ForgotPasswo
 	return nil
 }
 
-func (controller *Controller) cachePermission(c context.Context, role database.RoleEnum, resource string) (Permission, error) {
+func (service *AuthService) cachePermission(c context.Context, role database.RoleEnum, resource string) (Permission, error) {
 	logger, _ := logging.GetLogger()
-	perm, err := controller.q.GetResourcePermissionByRole(c, database.GetResourcePermissionByRoleParams{
+	perm, err := service.q.GetResourcePermissionByRole(c, database.GetResourcePermissionByRoleParams{
 		Resource: resource,
 		Role:     role,
 	})
@@ -315,7 +330,7 @@ func (controller *Controller) cachePermission(c context.Context, role database.R
 	}
 
 	key := "permission:" + string(perm.Role)
-	err = controller.rdb.HSet(c, key, resource, perm.Permissions).Err()
+	err = service.rdb.HSet(c, key, resource, perm.Permissions).Err()
 	if err != nil {
 		logger.App.Err(fmt.Sprintf("error Caching Permission, error: %v", err))
 	}

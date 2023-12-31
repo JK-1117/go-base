@@ -8,7 +8,7 @@ goose-down:
 	backend/bin/goose -dir sql/schema postgres postgres://postgres:OnlyADevPasswOrD@localhost:5432/dbname down
 
 server:
-	cd backend && go build -o cmd/main/main.exe cmd/main/main.go && cmd\main\main.exe
+	cd backend && go build -o tmp/main.exe cmd/main/main.go && tmp\\main.exe
 
 tidy:
 	cd backend && go mod tidy
